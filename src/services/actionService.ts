@@ -54,15 +54,17 @@ export async function freelanceWork(userId: string): Promise<ActionResult> {
       user_id: userId,
       transaction_type: "income",
       amount: earnings,
+      category: "Work",
       description: "Freelance kerja keras",
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     await supabase.from("event_log").insert({
       user_id: userId,
-      event_type: "income",
+      event_type: "opportunity", // using valid enum value
+      title: "Freelance Success",
       description: `Freelance dapet Rp ${earnings.toLocaleString("id-ID")}! Mental -${mentalCost} (cape bro)`,
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     return {
@@ -107,15 +109,17 @@ export async function partTimeJob(userId: string): Promise<ActionResult> {
       user_id: userId,
       transaction_type: "income",
       amount: earnings,
+      category: "Work",
       description: "Part-time job",
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     await supabase.from("event_log").insert({
       user_id: userId,
-      event_type: "income",
+      event_type: "opportunity",
+      title: "Part-time Job",
       description: `Part-time dapet Rp ${earnings.toLocaleString("id-ID")}. Mental -${mentalCost}`,
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     return {
@@ -154,24 +158,29 @@ export async function investCrypto(userId: string, amount: number): Promise<Acti
 
     await supabase.from("portfolio").insert({
       user_id: userId,
-      asset_type: "Crypto",
-      amount: amount,
-      current_value: amount
+      asset_type: "crypto", // Using lowercase to match CHECK constraint
+      asset_name: "Crypto Random",
+      quantity: 1, // Simplifying for now, 1 unit = invested amount
+      buy_price: amount,
+      current_price: amount,
+      purchased_turn: gameState.current_turn
     });
 
     await supabase.from("transactions").insert({
       user_id: userId,
       transaction_type: "investment",
       amount: -amount,
+      category: "Investment",
       description: "Invest Crypto (high risk!)",
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     await supabase.from("event_log").insert({
       user_id: userId,
-      event_type: "investment",
+      event_type: "opportunity",
+      title: "Crypto Investment",
       description: `Invest Rp ${amount.toLocaleString("id-ID")} di Crypto. To the moon! 🚀`,
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     return {
@@ -209,24 +218,29 @@ export async function investSaham(userId: string, amount: number): Promise<Actio
 
     await supabase.from("portfolio").insert({
       user_id: userId,
-      asset_type: "Saham",
-      amount: amount,
-      current_value: amount
+      asset_type: "saham", // Lowercase to match check constraint
+      asset_name: "Saham BUMN",
+      quantity: 1,
+      buy_price: amount,
+      current_price: amount,
+      purchased_turn: gameState.current_turn
     });
 
     await supabase.from("transactions").insert({
       user_id: userId,
       transaction_type: "investment",
       amount: -amount,
+      category: "Investment",
       description: "Invest Saham",
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     await supabase.from("event_log").insert({
       user_id: userId,
-      event_type: "investment",
+      event_type: "opportunity",
+      title: "Stock Investment",
       description: `Beli saham Rp ${amount.toLocaleString("id-ID")}. Sabar ya!`,
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     return {
@@ -268,8 +282,8 @@ export async function payDebt(userId: string, debtId: string, amount: number): P
       return { success: false, message: "Hutang tidak ditemukan!" };
     }
 
-    const payAmount = Math.min(amount, debt.amount);
-    const newDebtAmount = debt.amount - payAmount;
+    const payAmount = Math.min(amount, debt.current_balance);
+    const newDebtBalance = debt.current_balance - payAmount;
     const newCash = gameState.cash - payAmount;
 
     await supabase
@@ -280,35 +294,37 @@ export async function payDebt(userId: string, debtId: string, amount: number): P
       })
       .eq("user_id", userId);
 
-    if (newDebtAmount <= 0) {
+    if (newDebtBalance <= 0) {
       await supabase.from("debts").delete().eq("id", debtId);
     } else {
       await supabase
         .from("debts")
-        .update({ amount: newDebtAmount })
+        .update({ current_balance: newDebtBalance })
         .eq("id", debtId);
     }
 
     await supabase.from("transactions").insert({
       user_id: userId,
-      transaction_type: "expense",
+      transaction_type: "debt_payment",
       amount: -payAmount,
-      description: `Bayar hutang ${debt.source}`,
-      turn: gameState.turn
+      category: "Debt",
+      description: `Bayar hutang ${debt.creditor_name}`,
+      turn_number: gameState.current_turn
     });
 
     await supabase.from("event_log").insert({
       user_id: userId,
-      event_type: "debt_payment",
-      description: `Bayar Rp ${payAmount.toLocaleString("id-ID")} ke ${debt.source}. Credit score +5!`,
-      turn: gameState.turn
+      event_type: "achievement",
+      title: "Debt Payment",
+      description: `Bayar Rp ${payAmount.toLocaleString("id-ID")} ke ${debt.creditor_name}. Credit score +5!`,
+      turn_number: gameState.current_turn
     });
 
     return {
       success: true,
-      message: newDebtAmount <= 0 
+      message: newDebtBalance <= 0 
         ? `Hutang lunas! Credit score +5` 
-        : `Bayar Rp ${payAmount.toLocaleString("id-ID")}. Sisa ${newDebtAmount.toLocaleString("id-ID")}`
+        : `Bayar Rp ${payAmount.toLocaleString("id-ID")}. Sisa ${newDebtBalance.toLocaleString("id-ID")}`
     };
   } catch (error) {
     console.error("Pay debt error:", error);
@@ -351,22 +367,24 @@ export async function takeVacation(userId: string, destination: string, cost: nu
       destination: destination,
       cost: cost,
       mental_gain: mentalGain,
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     await supabase.from("transactions").insert({
       user_id: userId,
       transaction_type: "expense",
       amount: -cost,
+      category: "Lifestyle",
       description: `Liburan ke ${destination}`,
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     await supabase.from("event_log").insert({
       user_id: userId,
-      event_type: "vacation",
+      event_type: "achievement",
+      title: "Vacation",
       description: `Liburan ke ${destination}! Mental +${mentalGain}. Worth it!`,
-      turn: gameState.turn
+      turn_number: gameState.current_turn
     });
 
     return {

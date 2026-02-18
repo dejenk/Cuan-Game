@@ -1,9 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
-type GameState = Database["public"]["Tables"]["game_state"]["Row"];
-type Portfolio = Database["public"]["Tables"]["portfolio"]["Row"];
-type Debt = Database["public"]["Tables"]["debts"]["Row"];
+export type GameState = Database["public"]["Tables"]["game_state"]["Row"];
+export type Portfolio = Database["public"]["Tables"]["portfolio"]["Row"];
+export type Debt = Database["public"]["Tables"]["debts"]["Row"];
 
 export interface GameStats {
   cash: number;
@@ -50,7 +50,7 @@ export async function initializeGame(userId: string): Promise<ActionResult> {
         mental_health: 100,
         reputation: 50,
         credit_score: 650,
-        turn: 1,
+        current_turn: 1,
         action_points: 3
       })
       .select()
@@ -61,16 +61,18 @@ export async function initializeGame(userId: string): Promise<ActionResult> {
     // Create leaderboard entry
     await supabase.from("leaderboard").insert({
       user_id: userId,
+      player_name: "Pejuang Baru",
       net_worth: 5000000,
-      turns_played: 1
+      current_turn: 1
     });
 
     // Log initial event
     await supabase.from("event_log").insert({
       user_id: userId,
-      event_type: "game_start",
+      event_type: "random",
+      title: "Game Start",
       description: "Selamat datang di dunia Pejuang Rupiah! Kamu punya 5 juta di rekening. Jangan boros ya!",
-      turn: 1
+      turn_number: 1
     });
 
     return {
@@ -83,7 +85,7 @@ export async function initializeGame(userId: string): Promise<ActionResult> {
         reputation: gameState.reputation,
         creditScore: gameState.credit_score,
         totalDebt: 0,
-        turn: gameState.turn,
+        turn: gameState.current_turn,
         actionPoints: gameState.action_points
       }
     };
@@ -110,11 +112,11 @@ export async function getGameStats(userId: string): Promise<GameStats | null> {
     // Calculate total debt
     const { data: debts } = await supabase
       .from("debts")
-      .select("amount")
+      .select("current_balance")
       .eq("user_id", userId);
 
     const totalDebt = Array.isArray(debts) 
-      ? debts.reduce((sum, d) => sum + d.amount, 0) 
+      ? debts.reduce((sum, d) => sum + d.current_balance, 0) 
       : 0;
 
     return {
@@ -124,7 +126,7 @@ export async function getGameStats(userId: string): Promise<GameStats | null> {
       reputation: gameState.reputation,
       creditScore: gameState.credit_score,
       totalDebt,
-      turn: gameState.turn,
+      turn: gameState.current_turn,
       actionPoints: gameState.action_points
     };
   } catch (error) {
@@ -146,7 +148,7 @@ export async function endTurn(userId: string): Promise<ActionResult> {
       return { success: false, message: "Game state tidak ditemukan!" };
     }
 
-    const newTurn = gameState.turn + 1;
+    const newTurn = gameState.current_turn + 1;
     const events: string[] = [];
 
     // Calculate weekly changes
@@ -167,13 +169,13 @@ export async function endTurn(userId: string): Promise<ActionResult> {
 
     if (Array.isArray(debts) && debts.length > 0) {
       for (const debt of debts) {
-        const interest = debt.amount * (debt.interest_rate / 100);
+        const interest = debt.current_balance * (debt.interest_rate / 100);
         await supabase
           .from("debts")
-          .update({ amount: debt.amount + interest })
+          .update({ current_balance: debt.current_balance + Math.floor(interest) })
           .eq("id", debt.id);
 
-        events.push(`Hutang ${debt.source}: +Rp ${interest.toLocaleString("id-ID")} bunga`);
+        events.push(`Hutang ${debt.creditor_name}: +Rp ${Math.floor(interest).toLocaleString("id-ID")} bunga`);
         
         // Mental stress from debt
         newMental -= 2;
@@ -189,19 +191,21 @@ export async function endTurn(userId: string): Promise<ActionResult> {
     if (Array.isArray(portfolio) && portfolio.length > 0) {
       for (const asset of portfolio) {
         const weeklyReturn = Math.random() * 0.05 - 0.02; // -2% to +3% per week
-        const returnAmount = asset.amount * weeklyReturn;
-        const newAmount = asset.amount + returnAmount;
+        const currentVal = asset.current_price * Number(asset.quantity); // Approximate total value
+        const returnAmount = currentVal * weeklyReturn;
+        
+        // Update current price per unit
+        const newPricePerUnit = asset.current_price * (1 + weeklyReturn);
 
         await supabase
           .from("portfolio")
           .update({ 
-            amount: newAmount,
-            current_value: newAmount 
+            current_price: Math.floor(newPricePerUnit)
           })
           .eq("id", asset.id);
 
         const sign = returnAmount >= 0 ? "+" : "";
-        events.push(`${asset.asset_type}: ${sign}Rp ${returnAmount.toLocaleString("id-ID")}`);
+        events.push(`${asset.asset_type}: ${sign}Rp ${Math.floor(returnAmount).toLocaleString("id-ID")}`);
       }
     }
 
@@ -227,20 +231,20 @@ export async function endTurn(userId: string): Promise<ActionResult> {
     // Calculate new net worth
     const { data: updatedPortfolio } = await supabase
       .from("portfolio")
-      .select("current_value")
+      .select("*")
       .eq("user_id", userId);
 
     const portfolioValue = Array.isArray(updatedPortfolio)
-      ? updatedPortfolio.reduce((sum, p) => sum + p.current_value, 0)
+      ? updatedPortfolio.reduce((sum, p) => sum + (p.current_price * Number(p.quantity)), 0)
       : 0;
 
     const { data: updatedDebts } = await supabase
       .from("debts")
-      .select("amount")
+      .select("current_balance")
       .eq("user_id", userId);
 
     const totalDebt = Array.isArray(updatedDebts)
-      ? updatedDebts.reduce((sum, d) => sum + d.amount, 0)
+      ? updatedDebts.reduce((sum, d) => sum + d.current_balance, 0)
       : 0;
 
     const newNetWorth = newCash + portfolioValue - totalDebt;
@@ -249,10 +253,10 @@ export async function endTurn(userId: string): Promise<ActionResult> {
     const { data: updatedState, error } = await supabase
       .from("game_state")
       .update({
-        turn: newTurn,
+        current_turn: newTurn,
         action_points: 3,
-        cash: newCash,
-        net_worth: newNetWorth,
+        cash: Math.floor(newCash),
+        net_worth: Math.floor(newNetWorth),
         mental_health: Math.max(0, newMental),
         reputation: Math.max(0, Math.min(100, newReputation))
       })
@@ -266,17 +270,18 @@ export async function endTurn(userId: string): Promise<ActionResult> {
     await supabase
       .from("leaderboard")
       .update({
-        net_worth: newNetWorth,
-        turns_played: newTurn
+        net_worth: Math.floor(newNetWorth),
+        current_turn: newTurn
       })
       .eq("user_id", userId);
 
     // Log event
     await supabase.from("event_log").insert({
       user_id: userId,
-      event_type: "turn_end",
+      event_type: "random", // Using generic 'random' type since 'turn_end' isn't in enum
+      title: `Minggu ${newTurn}`,
       description: `Minggu ${newTurn} dimulai!\n${events.join("\n")}`,
-      turn: newTurn
+      turn_number: newTurn
     });
 
     return {
@@ -290,7 +295,7 @@ export async function endTurn(userId: string): Promise<ActionResult> {
         reputation: updatedState.reputation,
         creditScore: updatedState.credit_score,
         totalDebt,
-        turn: updatedState.turn,
+        turn: updatedState.current_turn,
         actionPoints: updatedState.action_points
       }
     };
