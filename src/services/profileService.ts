@@ -41,7 +41,7 @@ export async function getPlayerProfile(userId: string): Promise<PlayerProfile | 
     // Get player name from leaderboard
     const { data: leaderboard } = await supabase
       .from("leaderboard")
-      .select("player_name, net_worth, created_at")
+      .select("player_name, net_worth, updated_at")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -81,7 +81,7 @@ export async function getPlayerProfile(userId: string): Promise<PlayerProfile | 
       highestNetWorth: highestNetWorth?.net_worth || leaderboard?.net_worth || 0,
       totalVacations: vacationCount || 0,
       totalTransactions: transactionCount || 0,
-      createdAt: leaderboard?.created_at || new Date().toISOString()
+      createdAt: leaderboard?.updated_at || new Date().toISOString()
     };
 
     return profile;
