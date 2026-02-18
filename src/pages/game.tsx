@@ -13,7 +13,7 @@ import { BottomNav } from "@/components/game/BottomNav";
 import { useToast } from "@/hooks/use-toast";
 import { getGameStats, endTurn, type GameStats as GameStatsType } from "@/services/gameService";
 import { freelanceWork, partTimeJob, investCrypto, investSaham, payDebt, takeVacation } from "@/services/actionService";
-import { Briefcase, TrendingUp, Users, Plane, DollarSign } from "lucide-react";
+import { Briefcase, TrendingUp, Users, Plane, DollarSign, User } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -171,14 +171,25 @@ export default function GamePage() {
               <MobileNav stats={stats} playerName={playerName} onLogout={handleLogout} />
               <h1 className="text-xl md:text-2xl font-bold">Pejuang Rupiah 💰</h1>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="hidden md:flex"
-              onClick={handleLogout}
-            >
-              Logout
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="hidden md:flex"
+                onClick={() => router.push("/profile")}
+              >
+                <User className="w-4 h-4 mr-2" />
+                Profil
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="hidden md:flex"
+                onClick={handleLogout}
+              >
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
 

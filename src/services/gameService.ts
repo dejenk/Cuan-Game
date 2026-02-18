@@ -24,20 +24,41 @@ export interface ActionResult {
 }
 
 // Initialize new game for user
-export async function initializeGame(userId: string): Promise<ActionResult> {
+export async function initializeGame(userId: string, playerName: string): Promise<ActionResult> {
   try {
-    // Check if game already exists
-    const { data: existing } = await supabase
-      .from("game_state")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
+    // First ensure profile exists
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
 
-    if (existing) {
-      return {
-        success: false,
-        message: "Game sudah dimulai sebelumnya!"
-      };
+    if (profileError) {
+      console.error("Profile check error:", profileError);
+      return { success: false, message: "Error checking profile" };
+    }
+
+    if (!profile) {
+      // Create profile if it doesn't exist
+      const { error: createProfileError } = await supabase
+        .from("profiles")
+        .insert({ id: userId });
+
+      if (createProfileError) {
+        console.error("Profile creation error:", createProfileError);
+        return { success: false, message: "Gagal membuat profile. Coba login ulang." };
+      }
+    }
+
+    // Check if game already exists
+    const { data: existingGame } = await supabase
+      .from("game_state")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existingGame) {
+      return { success: true, message: "Game sudah dimulai!" };
     }
 
     // Create initial game state
@@ -101,13 +122,20 @@ export async function initializeGame(userId: string): Promise<ActionResult> {
 // Get current game stats
 export async function getGameStats(userId: string): Promise<GameStats | null> {
   try {
-    const { data: gameState } = await supabase
+    const { data: gameState, error } = await supabase
       .from("game_state")
       .select("*")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
-    if (!gameState) return null;
+    if (error) {
+      console.error("Get game stats error:", error);
+      return null;
+    }
+
+    if (!gameState) {
+      return null;
+    }
 
     // Calculate total debt
     const { data: debts } = await supabase

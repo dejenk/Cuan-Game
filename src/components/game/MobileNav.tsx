@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, LogOut, User, TrendingUp } from "lucide-react";
+import { Menu, LogOut, User, TrendingUp, Settings } from "lucide-react";
 import type { GameStats } from "@/services/gameService";
+import { useRouter } from "next/navigation";
 
 interface MobileNavProps {
   stats: GameStats;
@@ -12,6 +13,7 @@ interface MobileNavProps {
 
 export function MobileNav({ stats, playerName, onLogout }: MobileNavProps) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -67,7 +69,18 @@ export function MobileNav({ stats, playerName, onLogout }: MobileNavProps) {
           </div>
 
           {/* Actions */}
-          <div className="pt-4 border-t">
+          <div className="pt-4 border-t space-y-2">
+            <Button 
+              variant="outline" 
+              className="w-full justify-start gap-2"
+              onClick={() => {
+                router.push("/profile");
+                setOpen(false);
+              }}
+            >
+              <Settings className="w-4 h-4" />
+              Pengaturan Profil
+            </Button>
             <Button 
               variant="outline" 
               className="w-full justify-start gap-2"

@@ -67,7 +67,16 @@ export default function HomePage() {
       return;
     }
 
-    if (data.user) {
+    if (data.user && data.session) {
+      // User is automatically logged in after signup
+      setUser(data.user);
+      toast({
+        title: "Berhasil daftar!",
+        description: "Sekarang masukkan nama untuk mulai bermain",
+      });
+      setEmail("");
+      setPassword("");
+    } else {
       toast({
         title: "Berhasil daftar!",
         description: "Silakan login untuk mulai bermain",
@@ -106,7 +115,17 @@ export default function HomePage() {
 
     if (data.user) {
       setUser(data.user);
-      checkUser();
+      
+      // Check if game already exists
+      const { data: gameState } = await supabase
+        .from("game_state")
+        .select("*")
+        .eq("user_id", data.user.id)
+        .single();
+      
+      if (gameState) {
+        router.push("/game");
+      }
     }
     setLoading(false);
   }
@@ -131,27 +150,48 @@ export default function HomePage() {
     }
 
     setLoading(true);
-    const result = await initializeGame(user.id);
     
-    if (result.success) {
-      // Update player name in leaderboard
-      await supabase
-        .from("leaderboard")
-        .update({ player_name: playerName })
-        .eq("user_id", user.id);
+    try {
+      // Start game
+      console.log("Initializing game for user:", user.id);
+      const result = await initializeGame(user.id, playerName);
+      
+      if (result.success) {
+        // Update player name in leaderboard
+        const { error: updateError } = await supabase
+          .from("leaderboard")
+          .update({ player_name: playerName.trim() })
+          .eq("user_id", user.id);
 
-      toast({
-        title: "Game dimulai!",
-        description: result.message,
-      });
-      router.push("/game");
-    } else {
+        if (updateError) {
+          console.error("Error updating player name:", updateError);
+        }
+
+        toast({
+          title: "Game dimulai!",
+          description: result.message,
+        });
+        
+        // Small delay to ensure data is written
+        setTimeout(() => {
+          router.push("/game");
+        }, 500);
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error("Start game error:", error);
       toast({
         title: "Error",
-        description: result.message,
+        description: "Terjadi kesalahan saat memulai game. Coba lagi!",
         variant: "destructive"
       });
     }
+    
     setLoading(false);
   }
 
@@ -178,6 +218,11 @@ export default function HomePage() {
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
                   disabled={loading}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && playerName.trim() && !loading) {
+                      handleStartGame();
+                    }
+                  }}
                 />
               </div>
               <Button 
@@ -186,12 +231,13 @@ export default function HomePage() {
                 onClick={handleStartGame}
                 disabled={loading || !playerName.trim()}
               >
-                {loading ? "Loading..." : "Mulai Perjuangan! 🚀"}
+                {loading ? "Memulai game..." : "Mulai Perjuangan! 🚀"}
               </Button>
               <Button 
                 variant="outline" 
                 className="w-full"
                 onClick={() => supabase.auth.signOut().then(() => setUser(null))}
+                disabled={loading}
               >
                 Logout
               </Button>
@@ -294,6 +340,11 @@ export default function HomePage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         disabled={loading}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && email && password && !loading) {
+                            handleSignIn();
+                          }
+                        }}
                       />
                     </div>
                     <Button 
@@ -324,6 +375,11 @@ export default function HomePage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         disabled={loading}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && email && password && !loading) {
+                            handleSignUp();
+                          }
+                        }}
                       />
                     </div>
                     <Button 

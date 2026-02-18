@@ -179,3 +179,133 @@ export const authService = {
     return supabase.auth.onAuthStateChange(callback);
   }
 };
+
+export async function signUp(email: string, password: string) {
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) {
+      console.error("Sign up error:", error);
+      return { success: false, message: error.message };
+    }
+
+    if (data.user) {
+      // Ensure profile exists (backup if trigger doesn't work)
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: data.user.id,
+          email: data.user.email,
+          full_name: null,
+        }, {
+          onConflict: "id"
+        });
+
+      if (profileError) {
+        console.error("Profile creation error:", profileError);
+      }
+    }
+
+    return { 
+      success: true, 
+      message: "Pendaftaran berhasil! Silakan login.",
+      session: data.session,
+      user: data.user
+    };
+  } catch (error: any) {
+    console.error("Sign up error:", error);
+    return { success: false, message: "Pendaftaran gagal!" };
+  }
+}
+
+export async function signOut() {
+  const { error } = await supabase.auth.signOut();
+  return { success: !error };
+}
+
+// Update user password
+export async function updatePassword(newPassword: string) {
+  try {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) {
+      console.error("Update password error:", error);
+      return { success: false, message: error.message };
+    }
+
+    return { success: true, message: "Password berhasil diubah!" };
+  } catch (error) {
+    console.error("Update password error:", error);
+    return { success: false, message: "Gagal mengubah password!" };
+  }
+}
+
+// Send password reset email
+export async function sendPasswordResetEmail(email: string) {
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`
+    });
+
+    if (error) {
+      console.error("Reset password error:", error);
+      return { success: false, message: error.message };
+    }
+
+    return { success: true, message: "Email reset password sudah dikirim! Cek inbox kamu." };
+  } catch (error) {
+    console.error("Reset password error:", error);
+    return { success: false, message: "Gagal mengirim email reset!" };
+  }
+}
+
+// Get current user profile
+export async function getCurrentUserProfile() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return { success: false, data: null };
+    }
+
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Get profile error:", error);
+      return { success: false, data: null };
+    }
+
+    return { success: true, data: { ...profile, email: user.email } };
+  } catch (error) {
+    console.error("Get profile error:", error);
+    return { success: false, data: null };
+  }
+}
+
+// Update user email
+export async function updateEmail(newEmail: string) {
+  try {
+    const { error } = await supabase.auth.updateUser({
+      email: newEmail
+    });
+
+    if (error) {
+      console.error("Update email error:", error);
+      return { success: false, message: error.message };
+    }
+
+    return { success: true, message: "Email berhasil diubah! Cek email baru kamu untuk verifikasi." };
+  } catch (error) {
+    console.error("Update email error:", error);
+    return { success: false, message: "Gagal mengubah email!" };
+  }
+}
